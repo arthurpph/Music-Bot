@@ -71,8 +71,9 @@ async def play(ctx: commands.Context, musica: str):
         except Exception as e:
             print(e)
 
-    await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Baixando música..."),
-                                    ephemeral=True)
+    await ctx.response.defer(thinking=True, ephemeral=True)
+    #       await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Baixando música..."),
+    #                                    ephemeral=True)
 
     if musica.startswith("http") or musica.startswith("www"):
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
@@ -84,6 +85,27 @@ async def play(ctx: commands.Context, musica: str):
             info = ydl.extract_info(f"ytsearch:{musica}", download=False)["entries"][0]
             title = info["title"]
             url = info["webpage_url"]
+
+    """
+    followup_message = None
+
+    async def update_progress(download):
+        global followup_message
+
+        if download["status"] == "downloading":
+            if followup_message:
+                coro = followup_message.edit(content=f"Baixando: {download['_percent_str']}")
+                fut = asyncio.run_coroutine_threadsafe(coro, bot.loop)
+                fut.result()
+            else:
+                coro = ctx.channel.send(content=f"Baixando: {download['_percent_str']}")
+                fut = asyncio.run_coroutine_threadsafe(coro, bot.loop)
+                followup_message = fut.result()
+        elif download["status"] == "finished":
+            coro = followup_message.edit(content="Download finalizado")
+            fut = asyncio.run_coroutine_threadsafe(coro, bot.loop)
+            fut.result()
+   """
 
     ydl_opts = {
         "format": "bestaudio/best",
@@ -109,14 +131,17 @@ async def play(ctx: commands.Context, musica: str):
         embed = Embed(color=discord.Color.dark_purple(), description=f"Adicionado a fila: ** {title} **")
         embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
         await ctx.channel.send(embed=embed)
+        await ctx.response.send_message("Música adicionada a fila", ephemeral=True)
     else:
         voice.play(discord.FFmpegPCMAudio(f"{title}.mp3"), after=lambda e: asyncio.run(check_queue()))
         embed = Embed(color=discord.Color.dark_purple(),
                       description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
         embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
         await ctx.channel.send(embed=embed)
+        await ctx.followup.send("Música tocando!", ephemeral=True)
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
         musics_to_delete.append(title)
+
 
     async def check_queue():
         for music in musics_to_delete:
