@@ -149,6 +149,10 @@ async def play(ctx: commands.Context, musica: str):
             fut_2 = asyncio.run_coroutine_threadsafe(coro_2, bot.loop)
             fut_2.result()
 
+            coro_3 = voice.disconnect()
+            fut_3 = asyncio.run_coroutine_threadsafe(coro_3, bot.loop)
+            fut_3.result()
+
 
 @bot.tree.command(name="pause", description="Pausa a reprodução")
 async def pause(ctx: commands.Context):
