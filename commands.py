@@ -89,7 +89,7 @@ class Commands(commands.Cog):
             await ctx.followup.send("Música adicionada a fila", ephemeral=True)
         else:
             voice.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
-                       after=lambda e: asyncio.run(utils.check_queue(ctx, False)))
+                       after=lambda e: asyncio.run(check_queue(ctx, self.bot, False)))
             embed = Embed(color=discord.Color.dark_purple(),
                           description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
             embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
@@ -178,6 +178,107 @@ class Commands(commands.Cog):
         queuelist = []
 
         await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Fila limpa"))
+
+
+"""
+Checks the current queue and update the environment accordingly 
+
+:param ctx: Command context
+:type ctx: commands.Context
+
+:param bot: Bot instance
+:type bot: commands.Bot
+
+:param asynchronously: Solve the use of await on common and lambda functions, being set to False on lambda
+:type asynchronously: bool
+
+:param return_answer: Returns the answer instead of sending it so that the function that called it can send it on his own Context
+:type return_answer: bool
+
+:returns: The answer or a boolean value saying if a new music started to play or not
+:rtype: str or bool
+"""
+async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously: bool, return_answer=False):
+    global stop_signal
+
+    if stop_signal:
+        stop_signal = False
+        return
+
+    voice_client = await utils.connect_to_channel(ctx, bot)
+
+    if not voice_client:
+        return
+
+    if len(queuelist) > 0:
+        if queuelist[0] is not None:
+            if voice_client.is_playing():
+                stop_signal = True
+                voice_client.stop()
+
+            url = queuelist[0]["url"]
+            if url.startswith("https://www.youtube.com"):
+                url = utils.get_youtube_download_link(url)
+            else:
+                await asyncio.sleep(3)
+
+            title = queuelist[0]['title']
+            voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
+                              after=lambda e: asyncio.run(check_queue(ctx, bot, False)))
+            embed_temp = Embed(color=discord.Color.dark_purple(),
+                               description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
+            queuelist.pop(0)
+
+            if asynchronously:
+                await bot.change_presence(
+                    activity=discord.Activity(type=discord.ActivityType.listening, name=title))
+
+                if return_answer:
+                    return embed_temp
+
+                await ctx.channel.send(embed=embed_temp)
+
+                return True
+
+            coro_1 = bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
+            coro_2 = ctx.channel.send(embed=embed_temp)
+
+            await utils.execute_coroutine_threadsafe(coro_1, bot)
+
+            if return_answer:
+                return embed_temp
+
+            await utils.execute_coroutine_threadsafe(coro_2, bot)
+
+            return True
+
+    embed = Embed(color=discord.Color.dark_purple(),
+                  description="Nenhuma música na fila, desconectado do canal de voz")
+
+    if asynchronously:
+        await bot.change_presence(activity=None)
+        await voice_client.disconnect()
+
+        if return_answer:
+            return embed
+
+        await ctx.channel.send(embed=embed)
+
+        return False
+
+    coro_1 = bot.change_presence(activity=None)
+    coro_2 = voice_client.disconnect()
+    coro_3 = ctx.channel.send(embed=embed)
+
+    await utils.execute_coroutine_threadsafe(coro_1, bot)
+    await utils.execute_coroutine_threadsafe(coro_2, bot)
+
+    if return_answer:
+        return embed
+
+    await utils.execute_coroutine_threadsafe(coro_3, bot)
+
+    return False
 
 
 async def setup(bot):
