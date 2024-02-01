@@ -10,6 +10,7 @@ import yt_dlp as youtube_dl
 
 from dotenv import load_dotenv
 
+from ydl_config import ydl_opts
 import utils
 
 load_dotenv()
@@ -24,18 +25,6 @@ stop_signal = False
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
-}
-
-ydl_opts = {
-    "format": "bestaudio/best",
-    "extract_flat": True,
-    "postprocessors": [
-        {
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192"
-        }
-    ]
 }
 
 
@@ -74,14 +63,19 @@ async def join(ctx):
 @bot.tree.command(name="play", description="Reproduz a música selecionada")
 @app_commands.describe(musica="Escreva o nome da música")
 async def play(ctx: commands.Context, musica: str):
+    if musica.startswith("http") and not musica.startswith("https://www.youtube.com"):
+        await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(),
+                                            description="Eu só aceito áudios do youtube, por favor insira um link válido"), ephemeral=True)
+        return
+
     voice = await utils.connect_to_channel(ctx, bot)
 
     if not voice:
         return
 
-    await ctx.response.defer(thinking=True, ephemeral=True)
-
     if musica.startswith("http") or musica.startswith("www"):
+        await ctx.response.defer(thinking=True, ephemeral=True)
+
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(musica, download=False)
             if "entries" in info:
@@ -111,6 +105,7 @@ async def play(ctx: commands.Context, musica: str):
         queuelist.append({"title": title, "url": url})
         embed = Embed(color=discord.Color.dark_purple(), description=f"Adicionado a fila: ** {title} **")
         embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
+
         await ctx.channel.send(embed=embed)
         await ctx.followup.send("Música adicionada a fila", ephemeral=True)
     else:
@@ -119,12 +114,13 @@ async def play(ctx: commands.Context, musica: str):
         embed = Embed(color=discord.Color.dark_purple(),
                       description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
         embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
+
         await ctx.channel.send(embed=embed)
         await ctx.followup.send("Música tocando!", ephemeral=True)
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
 
 
-async def check_queue(ctx: commands.Context, asynchronously: bool, return_answer: bool):
+async def check_queue(ctx: commands.Context, asynchronously: bool, return_answer = None):
     global stop_signal
 
     if stop_signal:
@@ -209,8 +205,10 @@ async def check_queue(ctx: commands.Context, asynchronously: bool, return_answer
 @bot.tree.command(name="skip", description="Pula pra próxima música")
 async def skip(ctx: commands.Context):
     await ctx.response.defer(thinking=True, ephemeral=False)
+
     check_queue_return = await check_queue(ctx, True, True)
     check_queue_return.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
+
     await ctx.followup.send(embed=check_queue_return)
 
 
@@ -235,10 +233,13 @@ async def stop(ctx: commands.Context):
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if voice_client and voice_client.is_playing():
         stop_signal = True
+
         voice_client.stop()
         await voice_client.disconnect()
+
         await ctx.response.send_message(
             embed=Embed(color=discord.Color.dark_purple(), description="Desconectado do canal de voz"))
+        await bot.change_presence(activity=None)
         return
 
     await ctx.response.send_message(

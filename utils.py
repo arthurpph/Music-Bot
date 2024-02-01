@@ -4,17 +4,7 @@ import discord
 from discord import Embed
 import yt_dlp as youtube_dl
 
-ydl_opts = {
-    "format": "bestaudio/best",
-    "extract_flat": True,
-    "postprocessors": [
-        {
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192"
-        }
-    ]
-}
+from ydl_config import ydl_opts
 
 
 async def connect_to_channel(ctx, bot):
