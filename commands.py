@@ -8,9 +8,8 @@ import yt_dlp as youtube_dl
 from config import ydl_opts, FFMPEG_OPTIONS
 import utils
 
-
-queuelist = []
-stop_signal = False
+queuelist = {}
+stop_signal = {}
 
 
 class Commands(commands.Cog):
@@ -41,11 +40,15 @@ class Commands(commands.Cog):
     @app_commands.command(name="play", description="Reproduz a música selecionada")
     @app_commands.describe(musica="Escreva o nome da música")
     async def play(self, ctx: commands.Context, musica: str):
-        if musica.startswith("http") and (not musica.startswith("https://www.youtube.com") and not musica.startswith("https://youtu.be")):
+        if musica.startswith("http") and (
+                not musica.startswith("https://www.youtube.com") and not musica.startswith("https://youtu.be")):
             await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(),
                                                         description="Eu só aceito áudios do youtube, por favor insira um link válido"),
                                             ephemeral=True)
             return
+
+        if ctx.guild not in queuelist:
+            queuelist[ctx.guild] = []
 
         voice = await utils.connect_to_channel(ctx, self.bot)
 
@@ -60,7 +63,7 @@ class Commands(commands.Cog):
 
                 if "entries" in info:
                     for entry in info["entries"][1:]:
-                        queuelist.append({"title": entry["title"], "url": entry["url"]})
+                        queuelist[ctx.guild].append({"title": entry["title"], "url": entry["url"]})
 
                     title = info["entries"][0]["title"]
                     url = info["entries"][0]["url"]
@@ -71,21 +74,14 @@ class Commands(commands.Cog):
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(f"ytsearch:{musica}", download=False)["entries"][0]
 
-                if "entries" in info:
-                    for entry in info["entries"][1:]:
-                        queuelist.append(entry["url"])
-
-                    title = info["entries"][0]["title"]
-                    url = info["entries"][0]["url"]
-                else:
-                    title = info["title"]
-                    url = info["url"]
+                title = info["title"]
+                url = info["url"]
 
         if url.startswith("https://www.youtube.com"):
             url = utils.get_youtube_download_link(url)
 
         if voice.is_playing():
-            queuelist.append({"title": title, "url": url})
+            queuelist[ctx.guild].append({"title": title, "url": url})
             embed = Embed(color=discord.Color.dark_purple(), description=f"Adicionado a fila: ** {title} **")
             embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
 
@@ -130,10 +126,10 @@ class Commands(commands.Cog):
     async def stop(self, ctx: commands.Context):
         global queuelist, stop_signal
 
-        queuelist = []
         voice_client = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
         if voice_client and voice_client.is_playing():
-            stop_signal = True
+            stop_signal[ctx.guild] = True
+            del queuelist[ctx.guild]
 
             voice_client.stop()
             await voice_client.disconnect()
@@ -164,8 +160,15 @@ class Commands(commands.Cog):
     async def show_queue(self, ctx: commands.Context):
         embed = Embed(title="Fila", color=discord.Color.dark_purple())
 
-        num_songs_to_display = min(len(queuelist), 10)
-        for music in queuelist[:num_songs_to_display]:
+        if ctx.guild not in queuelist:
+            await ctx.response.send_message(
+                embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
+            return
+
+        queue = queuelist[ctx.guild]
+
+        num_songs_to_display = min(len(queue), 10)
+        for music in queue[:num_songs_to_display]:
             embed.add_field(name="\u200b", value=music["title"])
 
         if len(embed.fields) == 0:
@@ -173,8 +176,8 @@ class Commands(commands.Cog):
                 embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
             return
 
-        if len(queuelist) > num_songs_to_display:
-            embed.set_footer(text=f"+{len(queuelist) - num_songs_to_display} músicas na fila")
+        if len(queue) > num_songs_to_display:
+            embed.set_footer(text=f"+{len(queue) - num_songs_to_display} músicas na fila")
 
         await ctx.response.send_message(embed=embed)
 
@@ -182,7 +185,7 @@ class Commands(commands.Cog):
     async def clear_queue(self, ctx: commands.Context):
         global queuelist
 
-        queuelist = []
+        del queuelist[ctx.guild]
 
         await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Fila limpa"))
 
@@ -205,11 +208,13 @@ Checks the current queue and update the environment accordingly
 :returns: The answer or a boolean value saying if a new music started to play or not
 :rtype: str or bool
 """
+
+
 async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=False, return_answer=False):
     global stop_signal
 
-    if stop_signal:
-        stop_signal = False
+    if ctx.guild in stop_signal and stop_signal[ctx.guild]:
+        del stop_signal[ctx.guild]
         return
 
     voice_client = await utils.connect_to_channel(ctx, bot)
@@ -217,47 +222,47 @@ async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=F
     if not voice_client:
         return
 
-    if len(queuelist) > 0:
-        if queuelist[0] is not None:
-            if voice_client.is_playing():
-                stop_signal = True
-                voice_client.stop()
+    if ctx.guild in queuelist and len(queuelist[ctx.guild]) > 0:
+        queue = queuelist[ctx.guild]
+        if voice_client.is_playing():
+            stop_signal = True
+            voice_client.stop()
 
-            url = queuelist[0]["url"]
-            if url.startswith("https://www.youtube.com"):
-                url = utils.get_youtube_download_link(url)
-            else:
-                await asyncio.sleep(3)
+        url = queue[0]["url"]
+        if url.startswith("https://www.youtube.com"):
+            url = utils.get_youtube_download_link(url)
+        else:
+            await asyncio.sleep(3)
 
-            title = queuelist[0]['title']
-            voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
-                              after=lambda e: asyncio.run(check_queue(ctx, bot)))
-            embed_temp = Embed(color=discord.Color.dark_purple(),
-                               description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
-            queuelist.pop(0)
+        title = queue[0]['title']
+        voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
+                          after=lambda e: asyncio.run(check_queue(ctx, bot)))
+        embed_temp = Embed(color=discord.Color.dark_purple(),
+                           description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
+        queue.pop(0)
 
-            if asynchronously:
-                await bot.change_presence(
-                    activity=discord.Activity(type=discord.ActivityType.listening, name=title))
-
-                if return_answer:
-                    return embed_temp
-
-                await ctx.channel.send(embed=embed_temp)
-
-                return True
-
-            coro_1 = bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
-            coro_2 = ctx.channel.send(embed=embed_temp)
-
-            await utils.execute_coroutine_threadsafe(coro_1, bot)
+        if asynchronously:
+            await bot.change_presence(
+                activity=discord.Activity(type=discord.ActivityType.listening, name=title))
 
             if return_answer:
                 return embed_temp
 
-            await utils.execute_coroutine_threadsafe(coro_2, bot)
+            await ctx.channel.send(embed=embed_temp)
 
             return True
+
+        coro_1 = bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
+        coro_2 = ctx.channel.send(embed=embed_temp)
+
+        await utils.execute_coroutine_threadsafe(coro_1, bot)
+
+        if return_answer:
+            return embed_temp
+
+        await utils.execute_coroutine_threadsafe(coro_2, bot)
+
+        return True
 
     embed = Embed(color=discord.Color.dark_purple(),
                   description="Nenhuma música na fila, desconectado do canal de voz")
