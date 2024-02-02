@@ -52,7 +52,7 @@ def get_youtube_download_link(url):
 
 
 """
-Executes a asynchronously function on a different thread (threadsafe) than the main thread
+Executes a asynchronously function on a different thread than the main thread (threadsafe)
 
 :param coro: Function to be executed asynchronously
 :type coro: Union[Coroutine[Any, Any, Any], Awaitable[Any]] 

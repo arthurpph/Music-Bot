@@ -16,9 +16,6 @@ bot = commands.Bot(command_prefix="/", intents=intents)
 
 extensions = ["commands.py"]
 
-queuelist = []
-stop_signal = False
-
 
 @bot.event
 async def on_ready():
