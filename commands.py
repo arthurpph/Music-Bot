@@ -106,7 +106,10 @@ class Commands(commands.Cog):
 
         await ctx.response.defer(thinking=True, ephemeral=False)
 
-        stop_signal = True
+        if len(queuelist) == 0:
+            await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
+            return
+
         check_queue_return = await check_queue(ctx, self.bot, True, True)
         check_queue_return.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
 
