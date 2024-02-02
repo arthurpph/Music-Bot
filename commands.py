@@ -102,13 +102,11 @@ class Commands(commands.Cog):
 
     @app_commands.command(name="skip", description="Pula pra próxima música")
     async def skip(self, ctx: commands.Context):
-        global stop_signal
-
-        await ctx.response.defer(thinking=True, ephemeral=False)
-
         if len(queuelist) == 0:
             await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
             return
+
+        await ctx.response.defer(thinking=True, ephemeral=False)
 
         check_queue_return = await check_queue(ctx, self.bot, True, True)
         check_queue_return.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
