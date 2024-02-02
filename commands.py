@@ -41,7 +41,7 @@ class Commands(commands.Cog):
     @app_commands.command(name="play", description="Reproduz a música selecionada")
     @app_commands.describe(musica="Escreva o nome da música")
     async def play(self, ctx: commands.Context, musica: str):
-        if musica.startswith("http") and not musica.startswith("https://www.youtube.com"):
+        if musica.startswith("http") and (not musica.startswith("https://www.youtube.com") and not musica.startswith("https://youtu.be")):
             await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(),
                                                         description="Eu só aceito áudios do youtube, por favor insira um link válido"),
                                             ephemeral=True)
