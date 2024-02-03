@@ -4,6 +4,8 @@ import discord
 from discord import app_commands, Embed
 from discord.ext import commands
 import yt_dlp as youtube_dl
+from discord.ext.commands import Context
+from discord.ext.commands._types import BotT
 
 from config import ydl_opts, FFMPEG_OPTIONS
 from logger import get_logger
@@ -48,7 +50,8 @@ class Commands(commands.Cog):
         if musica.startswith("http") and (
                 not musica.startswith("https://www.youtube.com") and not musica.startswith("https://youtu.be")):
             await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(),
-                                                        description="Eu só aceito áudios do youtube, por favor insira um link válido"),
+                                                        description="Eu só aceito áudios do youtube, por favor insira "
+                                                                    "um link válido"),
                                             ephemeral=True)
             return
 
@@ -99,7 +102,6 @@ class Commands(commands.Cog):
             embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
 
             await ctx.followup.send(embed=embed)
-            await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
 
     @app_commands.command(name="skip", description="Pula pra próxima música")
     async def skip(self, ctx: commands.Context):
@@ -136,12 +138,10 @@ class Commands(commands.Cog):
             stop_signal[ctx.guild] = True
             del queuelist[ctx.guild]
 
-            voice_client.stop()
             await voice_client.disconnect()
 
             await ctx.response.send_message(
                 embed=Embed(color=discord.Color.dark_purple(), description="Desconectado do canal de voz"))
-            await self.bot.change_presence(activity=None)
             return
 
         await ctx.response.send_message(
@@ -194,6 +194,12 @@ class Commands(commands.Cog):
 
         await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Fila limpa"))
 
+    async def cog_app_command_error(self, ctx: commands.Context, error: Exception) -> None:
+        if isinstance(error, app_commands.CommandInvokeError):
+            await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), description="Não foi possível encontrar o conteúdo, por favor verifique se você não inseriu uma url inválida"))
+        else:
+            await ctx.followup.send(error)
+
 
 """
 Checks the current queue and update the environment accordingly 
@@ -213,8 +219,6 @@ Checks the current queue and update the environment accordingly
 :returns: The answer or a boolean value saying if a new music started to play or not
 :rtype: str or bool
 """
-
-
 async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=False, return_answer=False):
     global stop_signal
 
@@ -247,9 +251,6 @@ async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=F
         queue.pop(0)
 
         if asynchronously:
-            await bot.change_presence(
-                activity=discord.Activity(type=discord.ActivityType.listening, name=title))
-
             if return_answer:
                 return embed_temp
 
@@ -257,15 +258,12 @@ async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=F
 
             return True
 
-        coro_1 = bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
-        coro_2 = ctx.channel.send(embed=embed_temp)
-
-        await utils.execute_coroutine_threadsafe(coro_1, bot)
+        coro_1 = ctx.channel.send(embed=embed_temp)
 
         if return_answer:
             return embed_temp
 
-        await utils.execute_coroutine_threadsafe(coro_2, bot)
+        await utils.execute_coroutine_threadsafe(coro_1, bot)
 
         return True
 
@@ -273,7 +271,6 @@ async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=F
                   description="Nenhuma música na fila, desconectado do canal de voz")
 
     if asynchronously:
-        await bot.change_presence(activity=None)
         await voice_client.disconnect()
 
         if return_answer:
@@ -283,17 +280,15 @@ async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=F
 
         return False
 
-    coro_1 = bot.change_presence(activity=None)
-    coro_2 = voice_client.disconnect()
-    coro_3 = ctx.channel.send(embed=embed)
+    coro_1 = voice_client.disconnect()
+    coro_2 = ctx.channel.send(embed=embed)
 
     await utils.execute_coroutine_threadsafe(coro_1, bot)
-    await utils.execute_coroutine_threadsafe(coro_2, bot)
 
     if return_answer:
         return embed
 
-    await utils.execute_coroutine_threadsafe(coro_3, bot)
+    await utils.execute_coroutine_threadsafe(coro_2, bot)
 
     return False
 
