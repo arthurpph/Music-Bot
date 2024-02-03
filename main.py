@@ -8,6 +8,8 @@ from discord.ext import commands
 
 from dotenv import load_dotenv
 
+from logger import load_logger
+
 load_dotenv()
 TOKEN: Final[str] = os.getenv("DISCORD_TOKEN")
 
@@ -15,6 +17,8 @@ intents: discord.Intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="/", intents=intents)
 
 extensions = ["commands.py"]
+
+load_logger()
 
 
 @bot.event

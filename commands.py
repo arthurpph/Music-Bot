@@ -6,7 +6,10 @@ from discord.ext import commands
 import yt_dlp as youtube_dl
 
 from config import ydl_opts, FFMPEG_OPTIONS
+from logger import get_logger
 import utils
+
+logger = get_logger()
 
 queuelist = {}
 stop_signal = {}
@@ -40,6 +43,8 @@ class Commands(commands.Cog):
     @app_commands.command(name="play", description="Reproduz a música selecionada")
     @app_commands.describe(musica="Escreva o nome da música")
     async def play(self, ctx: commands.Context, musica: str):
+        logger.info(f"Command: /play {musica} by {ctx.user.name}")
+
         if musica.startswith("http") and (
                 not musica.startswith("https://www.youtube.com") and not musica.startswith("https://youtu.be")):
             await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(),
@@ -98,7 +103,7 @@ class Commands(commands.Cog):
 
     @app_commands.command(name="skip", description="Pula pra próxima música")
     async def skip(self, ctx: commands.Context):
-        if len(queuelist) == 0:
+        if len(queuelist[ctx.guild]) == 0:
             await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
             return
 
