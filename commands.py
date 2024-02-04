@@ -4,8 +4,6 @@ import discord
 from discord import app_commands, Embed
 from discord.ext import commands
 import yt_dlp as youtube_dl
-from discord.ext.commands import Context
-from discord.ext.commands._types import BotT
 
 from config import ydl_opts, FFMPEG_OPTIONS
 from logger import get_logger
@@ -164,10 +162,10 @@ class Commands(commands.Cog):
     @app_commands.command(name="show_queue", description="Mostra a fila de músicas")
     async def show_queue(self, ctx: commands.Context):
         embed = Embed(title="Fila", color=discord.Color.dark_purple())
+        queue_is_empty_embed = Embed(color=discord.Color.dark_purple(), description="A fila está vazia")
 
         if ctx.guild not in queuelist:
-            await ctx.response.send_message(
-                embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
+            await ctx.response.send_message(embed=queue_is_empty_embed)
             return
 
         queue = queuelist[ctx.guild]
@@ -177,8 +175,7 @@ class Commands(commands.Cog):
             embed.add_field(name="\u200b", value=music["title"])
 
         if len(embed.fields) == 0:
-            await ctx.response.send_message(
-                embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
+            await ctx.response.send_message(embed=queue_is_empty_embed)
             return
 
         if len(queue) > num_songs_to_display:
@@ -190,15 +187,28 @@ class Commands(commands.Cog):
     async def clear_queue(self, ctx: commands.Context):
         global queuelist
 
-        del queuelist[ctx.guild]
+        if ctx.guild in queuelist:
+            del queuelist[ctx.guild]
 
         await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Fila limpa"))
 
     async def cog_app_command_error(self, ctx: commands.Context, error: Exception) -> None:
+        try:
+            await ctx.response.defer()
+        except Exception:
+            pass
+
         if isinstance(error, app_commands.CommandInvokeError):
-            await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), description="Não foi possível encontrar o conteúdo, por favor verifique se você não inseriu uma url inválida"))
+            if isinstance(error.original, youtube_dl.utils.DownloadError):
+                await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(),
+                                                    description="Não foi possível encontrar o conteúdo, por favor verifique se você não inseriu uma url inválida"))
+                return
+
+            await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), title="Erro",
+                                                description=f"{error.original}\n\n Por favor reporte para shauuu\_"))
         else:
-            await ctx.followup.send(error)
+            await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), title="Erro",
+                                                description=f"{error.original}\n\n Por favor reporte para shauuu\_"))
 
 
 """
