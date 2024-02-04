@@ -22,16 +22,19 @@ Connects to the voice channel that the user who executed the command is connecte
 """
 async def connect_to_channel(ctx: commands.Context, bot: commands.Bot):
     voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    user_voice = ctx.user.voice
 
     if not voice:
-        user_voice = ctx.user.voice
         if not user_voice:
             await ctx.response.send_message(
                 embed=Embed(color=discord.Color.dark_purple(), description="Você não está em um canal de voz!"),
                 ephemeral=True)
             return
 
-        return await user_voice.channel.connect()
+        return await user_voice.channel.connect(reconnect=False)
+
+    if not voice.is_connected():
+        await voice.move_to(user_voice.channel)
 
     return voice
 

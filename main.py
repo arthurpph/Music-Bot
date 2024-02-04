@@ -30,6 +30,14 @@ async def on_ready():
     except Exception as e:
         print(f"Exceção ocorreu durante a inicialização do bot: {e}")
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member == bot.user:
+        if before.channel and not after.channel:
+            voice_client = discord.utils.get(bot.voice_clients, guild=member.guild)
+            if voice_client:
+                voice_client.stop()
+
 
 async def load_extensions():
     for filename in os.listdir("./"):

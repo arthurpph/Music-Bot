@@ -95,6 +95,7 @@ class Commands(commands.Cog):
         else:
             voice.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
                        after=lambda e: asyncio.run(check_queue(ctx, self.bot)))
+
             embed = Embed(color=discord.Color.dark_purple(),
                           description=f"Tocando ** {title} ** no canal dos folgados :musical_note:")
             embed.set_author(name=ctx.user.name, icon_url=ctx.user.avatar)
@@ -103,7 +104,7 @@ class Commands(commands.Cog):
 
     @app_commands.command(name="skip", description="Pula pra próxima música")
     async def skip(self, ctx: commands.Context):
-        if len(queuelist[ctx.guild]) == 0:
+        if ctx.guild not in queuelist or len(queuelist[ctx.guild]) == 0:
             await ctx.followup.send(embed=Embed(color=discord.Color.dark_purple(), description="A fila está vazia"))
             return
 
@@ -132,11 +133,18 @@ class Commands(commands.Cog):
         global queuelist, stop_signal
 
         voice_client = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
-        if voice_client and voice_client.is_playing():
-            stop_signal[ctx.guild] = True
-            del queuelist[ctx.guild]
+        if voice_client:
+            if voice_client.is_playing():
+                if not isinstance(stop_signal, dict):
+                    stop_signal = {}
 
-            await voice_client.disconnect()
+                stop_signal[ctx.guild] = True
+
+            if ctx.guild in queuelist:
+                del queuelist[ctx.guild]
+
+            if voice_client.is_connected():
+                await voice_client.disconnect()
 
             await ctx.response.send_message(
                 embed=Embed(color=discord.Color.dark_purple(), description="Desconectado do canal de voz"))
@@ -193,6 +201,8 @@ class Commands(commands.Cog):
         await ctx.response.send_message(embed=Embed(color=discord.Color.dark_purple(), description="Fila limpa"))
 
     async def cog_app_command_error(self, ctx: commands.Context, error: Exception) -> None:
+        logger.error(error)
+
         try:
             await ctx.response.defer()
         except Exception:
@@ -232,11 +242,11 @@ Checks the current queue and update the environment accordingly
 async def check_queue(ctx: commands.Context, bot: commands.Bot, asynchronously=False, return_answer=False):
     global stop_signal
 
-    if ctx.guild in stop_signal and stop_signal[ctx.guild]:
+    if isinstance(stop_signal, dict) and ctx.guild in stop_signal:
         del stop_signal[ctx.guild]
         return
 
-    voice_client = await utils.connect_to_channel(ctx, bot)
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
     if not voice_client:
         return
